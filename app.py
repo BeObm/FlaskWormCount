@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, send_from_directory, send_file, redirect, url_for
+from flask import Flask, request, render_template, send_from_directory, send_file, redirect, url_for, session
 from werkzeug.utils import secure_filename
 from ultralytics import YOLO
 from utils import draw_detections
@@ -10,36 +10,67 @@ import pandas as pd
 import tempfile
 import io
 import zipfile
-
+import uuid
+from datetime import datetime
 
 # --- Flask Setup ---
 app = Flask(__name__, static_folder='static')
+app.secret_key = 'your-secret-key-here'  # Change this to a secure secret key
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['OUTPUT_FOLDER'] = 'static/outputs'
-app.config['LOG_FILE'] = os.path.join(app.config['OUTPUT_FOLDER'], 'worm_log.xlsx')
+app.config['USER_LOGS_FOLDER'] = 'static/user_logs'
 
 # --- Ensure necessary folders exist ---
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
-
-# --- Create log file if not present ---
-if not os.path.isfile(app.config['LOG_FILE']):
-    df = pd.DataFrame(columns=["Image", "Worm Count"])
-    df.to_excel(app.config['LOG_FILE'], index=False)
+os.makedirs(app.config['USER_LOGS_FOLDER'], exist_ok=True)
 
 # --- Load YOLO model ---
 model = YOLO("runs/detect/train/weights/best.pt")
 
 
+def get_user_session_id():
+    """Get or create a unique session ID for the user"""
+    if 'user_id' not in session:
+        session['user_id'] = str(uuid.uuid4())
+    return session['user_id']
+
+
+def get_user_log_path(user_id):
+    """Get the path for user's individual log file"""
+    return os.path.join(app.config['USER_LOGS_FOLDER'], f'worm_log_{user_id}.xlsx')
+
+
+def get_user_output_folder(user_id):
+    """Get the output folder for user's processed images"""
+    user_output_folder = os.path.join(app.config['OUTPUT_FOLDER'], user_id)
+    os.makedirs(user_output_folder, exist_ok=True)
+    return user_output_folder
+
+
+def initialize_user_log(user_id):
+    """Create log file for user if it doesn't exist"""
+    log_path = get_user_log_path(user_id)
+    if not os.path.isfile(log_path):
+        df = pd.DataFrame(columns=["Image", "Worm Count", "Upload Time"])
+        df.to_excel(log_path, index=False)
+    return log_path
+
+
 # --- Main Route ---
 @app.route("/", methods=["GET", "POST"])
 def index():
+    user_id = get_user_session_id()
+    initialize_user_log(user_id)
+
     detections = []
     if request.method == "POST":
         uploaded_files = request.files.getlist("files[]")
+        user_output_folder = get_user_output_folder(user_id)
+
         for uploaded_file in uploaded_files:
             filename = secure_filename(uploaded_file.filename)
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{user_id}_{filename}")
             uploaded_file.save(file_path)
 
             # Convert to BGR for OpenCV
@@ -57,55 +88,80 @@ def index():
             result = results[0]
             worm_count = len(result.boxes)
 
-            # Draw detections and save
+            # Draw detections and save to user's folder
             img_with_detections = draw_detections(result)
             output_filename = f"detected_{os.path.splitext(filename)[0]}_{worm_count}.jpg"
-            output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
+            output_path = os.path.join(user_output_folder, output_filename)
             cv2.imwrite(output_path, img_with_detections)
 
-            # Log results
-            df = pd.read_excel(app.config['LOG_FILE'])
-            df.loc[len(df)] = [output_filename, worm_count]
-            df.to_excel(app.config['LOG_FILE'], index=False)
+            # Log results to user's individual log file
+            log_path = get_user_log_path(user_id)
+            df = pd.read_excel(log_path)
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            df.loc[len(df)] = [output_filename, worm_count, current_time]
+            df.to_excel(log_path, index=False)
 
             # Append for front-end display
             detections.append((output_filename, worm_count))
 
+            # Clean up temp files
+            os.unlink(temp_path)
+            os.unlink(file_path)
+
     return render_template("index.html", detections=detections)
 
-# Download worm_log.xlsx
+
+# Download user's individual worm_log.xlsx
 @app.route("/download/log")
 def download_log():
+    user_id = get_user_session_id()
+    log_path = get_user_log_path(user_id)
+
+    if not os.path.exists(log_path):
+        initialize_user_log(user_id)
+
     return send_file(
-        app.config['LOG_FILE'],
+        log_path,
         as_attachment=True,
-        download_name="worm_log.xlsx"
+        download_name=f"worm_log_{user_id[:8]}.xlsx"
     )
 
-# Download all detected output images as ZIP
+
+# Download user's detected output images as ZIP
 @app.route("/download/images")
 def download_images():
-    output_dir = app.config['OUTPUT_FOLDER']
-    memory_file = io.BytesIO()
+    user_id = get_user_session_id()
+    user_output_folder = get_user_output_folder(user_id)
 
+    memory_file = io.BytesIO()
     with zipfile.ZipFile(memory_file, 'w') as zf:
-        for filename in os.listdir(output_dir):
+        for filename in os.listdir(user_output_folder):
             if filename.endswith((".jpg", ".png")):
-                file_path = os.path.join(output_dir, filename)
+                file_path = os.path.join(user_output_folder, filename)
                 zf.write(file_path, arcname=filename)
 
     memory_file.seek(0)
     return send_file(
         memory_file,
         as_attachment=True,
-        download_name="detected_worms.zip",
+        download_name=f"detected_worms_{user_id[:8]}.zip",
         mimetype='application/zip'
     )
 
-# --- Serve output images ---
+
+# --- Serve output images (with user isolation) ---
 @app.route("/outputs/<filename>")
 def output_file(filename):
-    return send_from_directory(app.config['OUTPUT_FOLDER'], filename)
+    user_id = get_user_session_id()
+    user_output_folder = get_user_output_folder(user_id)
+    return send_from_directory(user_output_folder, filename)
+
+
+# --- Clear user session (optional endpoint for testing) ---
+@app.route("/clear_session")
+def clear_session():
+    session.clear()
+    return redirect(url_for('index'))
 
 
 # --- Run the app ---
