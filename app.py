@@ -13,7 +13,7 @@ import zipfile
 
 
 # --- Flask Setup ---
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['OUTPUT_FOLDER'] = 'static/outputs'
 app.config['LOG_FILE'] = os.path.join(app.config['OUTPUT_FOLDER'], 'worm_log.xlsx')
