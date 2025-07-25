@@ -3,6 +3,8 @@ from werkzeug.utils import secure_filename
 from ultralytics import YOLO
 from utils import draw_detections
 import os
+import random
+import torch
 import cv2
 import numpy as np
 from PIL import Image
@@ -25,9 +27,20 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
 os.makedirs(app.config['USER_LOGS_FOLDER'], exist_ok=True)
 
+
+
+random.seed(42)
+np.random.seed(42)
+torch.manual_seed(42)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+torch.set_num_threads(1)
+torch.set_num_interop_threads(1)
 # --- Load YOLO model ---
 model = YOLO("runs/detect/train/weights/best.pt")
+model.to("cuda" if torch.cuda.is_available() else "cpu")
 
+model.eval()
 
 def get_user_session_id():
     """Get or create a unique session ID for the user"""
@@ -84,9 +97,11 @@ def index():
                 temp_path = tmp.name
 
             # Run YOLO detection
-            results = model(temp_path)
+            results = model(temp_path,augment=False, conf=0.5, iou=0.45)
             result = results[0]
-            worm_count = len(result.boxes)
+            boxes = result.boxes.xyxy.cpu().numpy()
+            boxes = boxes[np.argsort(boxes[:, 0])]
+            worm_count = len(boxes)
 
             # Draw detections and save to user's folder
             img_with_detections = draw_detections(result)
