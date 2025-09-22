@@ -97,7 +97,7 @@ def index():
                 temp_path = tmp.name
 
             # Run YOLO detection
-            results = model(temp_path,augment=False, conf=0.5, iou=0.45)
+            results = model(temp_path,augment=False, conf=0.4, iou=0.75,save=True,show_conf=False)
             result = results[0]
             boxes = result.boxes.xyxy.cpu().numpy()
             boxes = boxes[np.argsort(boxes[:, 0])]
