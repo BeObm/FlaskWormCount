@@ -37,10 +37,9 @@ torch.backends.cudnn.benchmark = False
 torch.set_num_threads(1)
 torch.set_num_interop_threads(1)
 # --- Load YOLO model ---
-model = YOLO("runs/detect/train/weights/best_44.pt")
-model.to("cuda" if torch.cuda.is_available() else "cpu")
-
-model.eval()
+# model = YOLO("runs/detect/train/weights/best_44.pt")
+# model.to("cuda" if torch.cuda.is_available() else "cpu")
+# model.eval()
 
 def get_user_session_id():
     """Get or create a unique session ID for the user"""
@@ -97,12 +96,12 @@ def index():
                 temp_path = tmp.name
 
             # Run YOLO detection
-            # for i in [44,198,102,142,26]:
-            #     model_name=f"runs/detect/train/weights/best_{i}.pt"
-            #     model = YOLO(model_name)
-            #     model.to("cuda" if torch.cuda.is_available() else "cpu")
-            #
-            #     model.eval()
+            for i in [44,198,102,142,26]:
+                model_name=f"runs/detect/train/weights/best_{i}.pt"
+                model = YOLO(model_name)
+                model.to("cuda" if torch.cuda.is_available() else "cpu")
+
+                model.eval()
             results = model(temp_path,augment=False, conf=0.4, iou=0.75,save=True,show_conf=False)
             result = results[0]
             boxes = result.boxes.xyxy.cpu().numpy()
