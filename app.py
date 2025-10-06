@@ -37,10 +37,10 @@ torch.backends.cudnn.benchmark = False
 torch.set_num_threads(1)
 torch.set_num_interop_threads(1)
 # --- Load YOLO model ---
-# model = YOLO("runs/detect/train/weights/best_44.pt")
-# model.to("cuda" if torch.cuda.is_available() else "cpu")
-#
-# model.eval()
+model = YOLO("runs/detect/train/weights/best_44.pt")
+model.to("cuda" if torch.cuda.is_available() else "cpu")
+
+model.eval()
 
 def get_user_session_id():
     """Get or create a unique session ID for the user"""
@@ -97,37 +97,37 @@ def index():
                 temp_path = tmp.name
 
             # Run YOLO detection
-            for i in [44,198,102,142,26]:
-                model_name=f"runs/detect/train/weights/best_{i}.pt"
-                model = YOLO(model_name)
-                model.to("cuda" if torch.cuda.is_available() else "cpu")
+            # for i in [44,198,102,142,26]:
+            #     model_name=f"runs/detect/train/weights/best_{i}.pt"
+            #     model = YOLO(model_name)
+            #     model.to("cuda" if torch.cuda.is_available() else "cpu")
+            #
+            #     model.eval()
+            results = model(temp_path,augment=False, conf=0.4, iou=0.75,save=True,show_conf=False)
+            result = results[0]
+            boxes = result.boxes.xyxy.cpu().numpy()
+            boxes = boxes[np.argsort(boxes[:, 0])]
+            worm_count = len(boxes)
 
-                model.eval()
-                results = model(temp_path,augment=False, conf=0.4, iou=0.75,save=True,show_conf=False)
-                result = results[0]
-                boxes = result.boxes.xyxy.cpu().numpy()
-                boxes = boxes[np.argsort(boxes[:, 0])]
-                worm_count = len(boxes)
-    
-                # Draw detections and save to user's folder
-                img_with_detections = draw_detections(result)
-                output_filename = f"detected_{os.path.splitext(filename)[0]}_Model_{i}--{worm_count}.jpg"
-                output_path = os.path.join(user_output_folder, output_filename)
-                cv2.imwrite(output_path, img_with_detections)
+            # Draw detections and save to user's folder
+            img_with_detections = draw_detections(result)
+            output_filename = f"detected_{os.path.splitext(filename)[0]}_Model_{i}--{worm_count}.jpg"
+            output_path = os.path.join(user_output_folder, output_filename)
+            cv2.imwrite(output_path, img_with_detections)
 
-                # Log results to user's individual log file
-                log_path = get_user_log_path(user_id)
-                df = pd.read_excel(log_path)
-                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                df.loc[len(df)] = [output_filename, worm_count, current_time]
-                df.to_excel(log_path, index=False)
+            # Log results to user's individual log file
+            log_path = get_user_log_path(user_id)
+            df = pd.read_excel(log_path)
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            df.loc[len(df)] = [output_filename, worm_count, current_time]
+            df.to_excel(log_path, index=False)
 
-                # Append for front-end display
-                detections.append((output_filename, worm_count))
+            # Append for front-end display
+            detections.append((output_filename, worm_count))
 
-                # Clean up temp files
-                os.unlink(temp_path)
-                os.unlink(file_path)
+            # Clean up temp files
+            os.unlink(temp_path)
+            os.unlink(file_path)
 
     return render_template("index.html", detections=detections)
 
