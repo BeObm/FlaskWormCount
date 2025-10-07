@@ -111,7 +111,7 @@ def index():
 
             # Draw detections and save to user's folder
             img_with_detections = draw_detections(result)
-            output_filename = f"detected_{os.path.splitext(filename)[0]}_Model_{i}--{worm_count}.jpg"
+            output_filename = f"detected_{os.path.splitext(filename)[0]}--{worm_count}.jpg"
             output_path = os.path.join(user_output_folder, output_filename)
             cv2.imwrite(output_path, img_with_detections)
 
