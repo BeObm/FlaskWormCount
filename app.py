@@ -37,7 +37,7 @@ torch.backends.cudnn.benchmark = False
 torch.set_num_threads(1)
 torch.set_num_interop_threads(1)
 # --- Load YOLO model ---
-model = YOLO("runs/detect/train/weights/best_26.pt")
+model = YOLO("runs/detect/train/weights/best_93.pt")
 model.to("cuda" if torch.cuda.is_available() else "cpu")
 
 model.eval()
