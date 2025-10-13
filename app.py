@@ -26,9 +26,6 @@ app.config['USER_LOGS_FOLDER'] = 'static/user_logs'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
 os.makedirs(app.config['USER_LOGS_FOLDER'], exist_ok=True)
-
-
-
 random.seed(42)
 np.random.seed(42)
 torch.manual_seed(42)
@@ -37,10 +34,11 @@ torch.backends.cudnn.benchmark = False
 torch.set_num_threads(1)
 torch.set_num_interop_threads(1)
 # --- Load YOLO model ---
-model = YOLO("runs/detect/train/weights/best_93.pt")
+model = YOLO("runs/detect/train/weights/best_102.pt")
 model.to("cuda" if torch.cuda.is_available() else "cpu")
 
 model.eval()
+
 
 def get_user_session_id():
     """Get or create a unique session ID for the user"""
